@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _RTENETWORKSERVER_
+#define _RTENETWORKSERVER_
 
 // TODO: Figure out how to deal with anything that is defined by these and include them in implementation only to remove Windows.h macro pollution from our headers.
 #include "RakPeerInterface.h"
@@ -10,13 +11,6 @@
 #include "Singleton.h"
 #include "NetworkMessages.h"
 
-#include <array>
-#include <memory>
-#include <mutex>
-#include <thread>
-#include <queue>
-#include <vector>
-
 #define g_NetworkServer NetworkServer::Instance()
 
 /////////////////////////////////////////////////////////////////////////
@@ -27,19 +21,26 @@ namespace RTE {
 
 	class Timer;
 
+	/// <summary>
 	/// The centralized singleton manager of the network multiplayer server.
+	/// </summary>
 	class NetworkServer : public Singleton<NetworkServer> {
 		friend class SettingsMan;
 
 	public:
+
+		/// <summary>
 		///
+		/// </summary>
 		enum NetworkServerStats {
 			STAT_CURRENT = 0,
 			STAT_SHOWN,
 			MAX_STAT_RECORDS = 5
 		};
 
+		/// <summary>
 		///
+		/// </summary>
 		enum ThreadExitReasons {
 			NORMAL = 0,
 			THREAD_FINISH,
@@ -49,7 +50,9 @@ namespace RTE {
 			LOCKED
 		};
 
+		/// <summary>
 		/// Struct for registering terrain change events for network transmission.
+		/// </summary>
 		struct NetworkTerrainChange {
 			int x;
 			int y;
@@ -60,102 +63,145 @@ namespace RTE {
 		};
 
 #pragma region Creation
+		/// <summary>
 		/// Constructor method used to instantiate a NetworkServer object in system memory. This will call Create() so it shouldn't be called after.
-		NetworkServer();
+		/// </summary>
+		NetworkServer() { Clear(); Initialize(); }
 
+		/// <summary>
 		/// Makes the NetworkServer object ready for use.
-		/// @return An error return value signaling success or any particular failure. Anything below 0 is an error signal.
+		/// </summary>
+		/// <returns>An error return value signaling success or any particular failure. Anything below 0 is an error signal.</returns>
 		int Initialize();
 #pragma endregion
 
 #pragma region Destruction
+		/// <summary>
 		/// Destructor method used to clean up a NetworkServer object before deletion from system memory.
-		~NetworkServer();
+		/// </summary>
+		~NetworkServer() { Destroy(); }
 
+		/// <summary>
 		/// Destroys and resets (through Clear()) the NetworkServer object.
+		/// </summary>
 		void Destroy();
 #pragma endregion
 
 #pragma region Getters and Setters
+		/// <summary>
 		/// Gets whether server mode is enabled or not.
-		/// @return Whether server mode is enabled or not.
+		/// </summary>
+		/// <returns>Whether server mode is enabled or not.</returns>
 		bool IsServerModeEnabled() const { return m_IsInServerMode; }
 
+		/// <summary>
 		/// Enables server mode.
+		/// </summary>
 		void EnableServerMode() { m_IsInServerMode = true; }
 
+		/// <summary>
 		///
-		/// @return
+		/// </summary>
+		/// <returns></returns>
 		bool ReadyForSimulation();
 
+		/// <summary>
 		/// Gets the network player's name.
-		/// @param player The player to check for.
-		/// @return A string with the network player's name.
-		std::string& GetPlayerName(short player) { return m_ClientConnections[player].PlayerName; }
+		/// </summary>
+		/// <param name="player">The player to check for.</param>
+		/// <returns>A string with the network player's name.</returns>
+		std::string & GetPlayerName(short player) { return m_ClientConnections[player].PlayerName; }
 
+		/// <summary>
 		/// Gets whether the specified player is connected to the server or not.
-		/// @param player The player to check for.
-		/// @return Whether the player is connected to the server or not.
+		/// </summary>
+		/// <param name="player">The player to check for.</param>
+		/// <returns>Whether the player is connected to the server or not.</returns>
 		bool IsPlayerConnected(short player) const { return m_ClientConnections[player].IsActive; }
 
+		/// <summary>
 		/// Sets the port this server will be using.
-		/// @param newPort The new port to set.
-		void SetServerPort(const std::string& newPort);
+		/// </summary>
+		/// <param name="newPort">The new port to set.</param>
+		void SetServerPort(const std::string &newPort);
 
+		/// <summary>
 		/// Sets whether interlacing is used to reduce bandwidth usage or not.
-		/// @param newMode Whether to use interlacing or not.
+		/// </summary>
+		/// <param name="newMode">Whether to use interlacing or not.</param>
 		void SetInterlacingMode(bool newMode) { m_UseInterlacing = newMode; }
 
+		/// <summary>
 		/// Sets the duration this thread should be put to sleep for in milliseconds.
-		/// @param player The player to set for.
-		/// @param msecs Milliseconds to sleep for.
+		/// </summary>
+		/// <param name="player">The player to set for.</param>
+		/// <param name="msecs">Milliseconds to sleep for.</param>
 		void SetMSecsToSleep(short player, int msecs) { m_MSecsToSleep[player] = msecs; };
 
+		/// <summary>
 		/// Gets the ping time of the specified player.
-		/// @param player The player to get for.
-		/// @return The ping time of the player.
+		/// </summary>
+		/// <param name="player">The player to get for.</param>
+		/// <returns>The ping time of the player.</returns>
 		unsigned short GetPing(short player) const { return m_Ping[player]; }
 
+		/// <summary>
 		/// Gets whether server puts threads to sleep if it didn't receive anything for 10 seconds to reduce CPU load.
-		/// @return Whether threads will be put to sleep when server isn't receiving any data or not.
+		/// </summary>
+		/// <returns>Whether threads will be put to sleep when server isn't receiving any data or not.</returns>
 		bool GetServerSleepWhenIdle() const { return m_SleepWhenIdle; }
 
+		/// <summary>
 		/// Gets whether the server will try to put the thread to sleep to reduce CPU load if the sim frame took less time to complete than it should at 30 fps.
-		/// @return Whether threads will be put to sleep if server completed frame faster than it normally should or not.
+		/// </summary>
+		/// <returns>Whether threads will be put to sleep if server completed frame faster than it normally should or not.</returns>
 		bool GetServerSimSleepWhenIdle() const { return m_SimSleepWhenIdle; }
 #pragma endregion
 
 #pragma region Concrete Methods
+		/// <summary>
 		/// Start server, open ports etc.
+		/// </summary>
 		void Start();
 
+		/// <summary>
 		/// Updates the state of this NetworkServer. Supposed to be done every frame before drawing.
-		/// @param processInput Whether to process packets of player input data or not.
+		/// </summary>
+		/// <param name="processInput">Whether to process packets of player input data or not.</param>
 		void Update(bool processInput = false);
 #pragma endregion
 
 #pragma region Network Scene Handling
+		/// <summary>
 		///
-		/// @param isLocked
+		/// </summary>
+		/// <param name="isLocked"></param>
 		void LockScene(bool isLocked);
 
+		/// <summary>
 		///
+		/// </summary>
 		void ResetScene();
 
+		/// <summary>
 		///
-		/// @param terrainChange
+		/// </summary>
+		/// <param name="terrainChange"></param>
 		void RegisterTerrainChange(NetworkTerrainChange terrainChange);
 #pragma endregion
 
 	protected:
+
+		/// <summary>
 		///
+		/// </summary>
 		struct ClientConnection {
 			bool IsActive; //!<
 			RakNet::SystemAddress ClientId; //!<
 			RakNet::SystemAddress InternalId; //!<
 			int ResX; //!<
 			int ResY; //!<
-			std::thread* SendThread; //!<
+			std::thread *SendThread; //!<
 			std::string PlayerName; //!<
 		};
 
@@ -169,7 +215,7 @@ namespace RTE {
 		long m_MSecsSinceLastUpdate[c_MaxClients]; //!<
 		long m_MSecsToSleep[c_MaxClients]; //!<
 
-		RakNet::RakPeerInterface* m_Server; //!<
+		RakNet::RakPeerInterface *m_Server; //!<
 
 		std::string m_ServerPort; //!<
 
@@ -180,11 +226,11 @@ namespace RTE {
 		RakNet::SystemAddress m_NATServiceServerID; //!<
 		bool m_NatServerConnected; //!<
 
-		BITMAP* m_BackBuffer8[c_MaxClients]; //!< Buffers to store client screens before compression.
-		BITMAP* m_BackBufferGUI8[c_MaxClients]; //!< Buffers to store client GUI screens before compression.
+		BITMAP *m_BackBuffer8[c_MaxClients]; //!< Buffers to store client screens before compression.
+		BITMAP *m_BackBufferGUI8[c_MaxClients]; //!< Buffers to store client GUI screens before compression.
 
-		void* m_LZ4CompressionState[c_MaxClients]; //!<
-		void* m_LZ4FastCompressionState[c_MaxClients]; //!<
+		void *m_LZ4CompressionState[c_MaxClients]; //!<
+		void *m_LZ4FastCompressionState[c_MaxClients]; //!<
 
 		int m_MouseState1[c_MaxClients]; //!<
 		int m_MouseState2[c_MaxClients]; //!<
@@ -199,9 +245,11 @@ namespace RTE {
 		bool m_UseDeltaCompression; //!< Whether to use delta compression methods and conserve bandwidth.
 		int m_HighCompressionLevel; //!< Compression level. 10 is optimal, 12 is highest.
 
+		/// <summary>
 		/// Acceleration factor, higher values consume more bandwidth but less CPU.
 		/// The larger the acceleration value, the faster the algorithm, but also lesser the compression. It's a trade-off. It can be fine tuned, with each successive value providing roughly +~3% to speed.
 		/// An acceleration value of "1" is the same as regular LZ4_compress_default(). Values <= 0 will be replaced by ACCELERATION_DEFAULT(currently == 1, see lz4 documentation).
+		/// </summary>
 		int m_FastAccelerationFactor;
 
 		bool m_UseInterlacing; //!< Use interlacing to heavily reduce bandwidth usage at the cost of visual degradation (unusable at 30 fps, but may be suitable at 60 fps).
@@ -220,8 +268,8 @@ namespace RTE {
 		unsigned char m_PixelLineBufferDelta[c_MaxClients][c_MaxPixelLineBufferSize]; //!< Buffer to store currently transferred pixel data line.
 		unsigned char m_CompressedLineBuffer[c_MaxClients][c_MaxPixelLineBufferSize]; //!< Buffer to store compressed pixel data line.
 
-		unsigned char* m_PixelLineBuffersPrev[c_MaxClients]; //!<
-		unsigned char* m_PixelLineBuffersGUIPrev[c_MaxClients]; //!<
+		unsigned char *m_PixelLineBuffersPrev[c_MaxClients]; //!<
+		unsigned char *m_PixelLineBuffersGUIPrev[c_MaxClients]; //!<
 
 		std::queue<NetworkTerrainChange> m_PendingTerrainChanges[c_MaxClients]; //!<
 		std::queue<NetworkTerrainChange> m_CurrentTerrainChanges[c_MaxClients]; //!<
@@ -244,11 +292,16 @@ namespace RTE {
 
 		std::unique_ptr<Timer> m_LastPackedReceived; //!<
 
+		/// <summary>
 		/// Transmit frames as blocks instead of lines. Provides better compression at the cost of higher CPU usage.
 		/// Though the compression is quite high it is recommended that Width * Height are less than MTU size or about 1500 bytes or packets may be fragmented by network hardware or dropped completely.
+		/// </summary>
 		bool m_TransmitAsBoxes;
 		int m_BoxWidth; //!< Width of the transmitted CPU block. Different values may improve bandwidth usage.
 		int m_BoxHeight; //!< Height of the transmitted CPU block. Different values may improve bandwidth usage.
+
+		static constexpr int c_KeyframeInterval = 90; //!< Frames between forced full resyncs; bounds delta drift from dropped packets.
+		int m_KeyframeCounters[c_MaxClients]; //!< Per-player counter toward the next forced keyframe.
 
 		int m_EmptyBlocks[MAX_STAT_RECORDS]; //!<
 		int m_FullBlocks[MAX_STAT_RECORDS]; //!<
@@ -279,200 +332,278 @@ namespace RTE {
 		unsigned long m_FrameDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
 		unsigned long m_FrameDataSentTotal[MAX_STAT_RECORDS]; //!<
 
-		unsigned long m_PostEffectDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
-		unsigned long m_PostEffectDataSentTotal[MAX_STAT_RECORDS]; //!<
+		unsigned long  m_PostEffectDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
+		unsigned long  m_PostEffectDataSentTotal[MAX_STAT_RECORDS]; //!<
 
-		unsigned long m_SoundDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
-		unsigned long m_SoundDataSentTotal[MAX_STAT_RECORDS]; //!<
+		unsigned long  m_SoundDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
+		unsigned long  m_SoundDataSentTotal[MAX_STAT_RECORDS]; //!<
 
-		unsigned long m_TerrainDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
-		unsigned long m_TerrainDataSentTotal[MAX_STAT_RECORDS]; //!<
+		unsigned long  m_TerrainDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
+		unsigned long  m_TerrainDataSentTotal[MAX_STAT_RECORDS]; //!<
 
 		unsigned long m_OtherDataSentCurrent[MAX_STAT_RECORDS][2]; //!<
 		unsigned long m_OtherDataSentTotal[MAX_STAT_RECORDS]; //!<
 
 	private:
-#pragma region Thread Handling
-		///
-		/// @param server
-		/// @param player
-		static void BackgroundSendThreadFunction(NetworkServer* server, short player);
 
+#pragma region Thread Handling
+		/// <summary>
 		///
-		/// @param player
-		/// @param reason
+		/// </summary>
+		/// <param name="server"></param>
+		/// <param name="player"></param>
+		static void BackgroundSendThreadFunction(NetworkServer *server, short player);
+
+		/// <summary>
+		///
+		/// </summary>
+		/// <param name="player"></param>
+		/// <param name="reason"></param>
 		void SetThreadExitReason(short player, int reason) { m_ThreadExitReason[player] = reason; };
 #pragma endregion
 
 #pragma region Network Event Handling
+		/// <summary>
 		///
-		/// @param packet
-		/// @return
-		unsigned char GetPacketIdentifier(RakNet::Packet* packet) const;
+		/// </summary>
+		/// <param name="packet"></param>
+		/// <returns></returns>
+		unsigned char GetPacketIdentifier(RakNet::Packet *packet) const;
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveNewIncomingConnection(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveNewIncomingConnection(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendAcceptedMsg(short player);
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveDisconnection(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveDisconnection(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveRegisterMsg(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveRegisterMsg(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param addr
+		/// </summary>
+		/// <param name="addr"></param>
 		void SendNATServerRegistrationMsg(RakNet::SystemAddress address);
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveInputMsg(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveInputMsg(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @param msg
+		/// </summary>
+		/// <param name="player"></param>
+		/// <param name="msg"></param>
 		void ProcessInputMsg(short player, MsgInput msg);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void ClearInputMessages(short player);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendSoundData(short player);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendMusicData(short player);
 #pragma endregion
 
 #pragma region Network Scene Handling
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		bool IsSceneAvailable(short player) const { return m_SceneAvailable[player]; }
 
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		bool NeedToSendSceneSetupData(short player) const { return m_SendSceneSetupData[player]; }
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendSceneSetupData(short player);
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveSceneSetupDataAccepted(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveSceneSetupDataAccepted(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		bool NeedToSendSceneData(short player) const { return m_SendSceneData[player]; }
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendSceneData(short player);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void ClearTerrainChangeQueue(short player);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		bool NeedToProcessTerrainChanges(short player);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void ProcessTerrainChanges(short player);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @param terrainChange
+		/// </summary>
+		/// <param name="player"></param>
+		/// <param name="terrainChange"></param>
 		void SendTerrainChangeMsg(short player, NetworkTerrainChange terrainChange);
 
+		/// <summary>
 		///
-		/// @param packet
-		void ReceiveSceneAcceptedMsg(RakNet::Packet* packet);
+		/// </summary>
+		/// <param name="packet"></param>
+		void ReceiveSceneAcceptedMsg(RakNet::Packet *packet);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendSceneEndMsg(short player);
 #pragma endregion
 
 #pragma region Network Frame Handling and Drawing
+		/// <summary>
 		///
-		/// @param player
-		/// @param w
-		/// @param h
+		/// </summary>
+		/// <param name="player"></param>
+		/// <param name="w"></param>
+		/// <param name="h"></param>
 		void CreateBackBuffer(short player, int w, int h);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @param w
-		/// @param h
+		/// </summary>
+		/// <param name="player"></param>
+		/// <param name="w"></param>
+		/// <param name="h"></param>
 		void ClearBackBuffer(int player, int w, int h);
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void DestroyBackBuffer(short player);
 
+		/// <summary>
 		///
-		/// @param player
-		void SendFrameSetupMsg(short player);
+		/// </summary>
+		/// <param name="player"></param>
+		void SendFrameSetupMsg(short player, bool useDelta, bool useInterlacing);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		bool SendFrameData(short player) const { return m_SendFrameData[player]; }
 
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void SendPostEffectData(short player);
 
+		/// <summary>
 		///
-		/// @param player
-		/// @return
+		/// </summary>
+		/// <param name="player"></param>
+		/// <returns></returns>
 		int SendFrame(short player);
 #pragma endregion
 
 #pragma region Network Stats Handling
+		/// <summary>
 		///
-		/// @param player
+		/// </summary>
+		/// <param name="player"></param>
 		void UpdateStats(short player);
 
+		/// <summary>
 		///
+		/// </summary>
 		void DrawStatisticsData();
 #pragma endregion
 
 #pragma region Update Breakdown
+		/// <summary>
 		///
+		/// </summary>
 		void HandleNetworkPackets();
 #pragma endregion
 
+		/// <summary>
 		/// Gets the Globally Unique Identifier of the server.
-		/// @return The GUID of the server.
+		/// </summary>
+		/// <returns>The GUID of the server.</returns>
 		RakNet::RakNetGUID GetServerGUID() const { return m_Server->GetGuidFromSystemAddress(RakNet::UNASSIGNED_SYSTEM_ADDRESS); }
 
+		/// <summary>
 		///
-		/// @param rakPeer
-		/// @param address
-		/// @param port
-		/// @return
-		RakNet::SystemAddress ConnectBlocking(RakNet::RakPeerInterface* rakPeer, const char* address, unsigned short port);
+		/// </summary>
+		/// <param name="rakPeer"></param>
+		/// <param name="address"></param>
+		/// <param name="port"></param>
+		/// <returns></returns>
+		RakNet::SystemAddress ConnectBlocking(RakNet::RakPeerInterface *rakPeer, const char *address, unsigned short port);
 
+		/// <summary>
 		/// Clears all the member variables of this NetworkServer, effectively resetting the members of this abstraction level only.
+		/// </summary>
 		void Clear();
 
 		// Disallow the use of some implicit methods.
-		NetworkServer(const NetworkServer& reference) = delete;
-		NetworkServer& operator=(const NetworkServer& rhs) = delete;
+		NetworkServer(const NetworkServer &reference) = delete;
+		NetworkServer & operator=(const NetworkServer &rhs) = delete;
 	};
-} // namespace RTE
+}
+#endif
