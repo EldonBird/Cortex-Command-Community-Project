@@ -16,6 +16,7 @@
 #include "TimerMan.h"
 #include "AudioMan.h"
 #include "FrameMan.h"
+#include "PostProcessMan.h"
 
 #include "RakNetStatistics.h"
 #include "RakSleep.h"
@@ -1272,7 +1273,10 @@ namespace RTE {
 		blit(frameManBmp, m_BackBuffer8[player], 0, 0, 0, 0, frameManBmp->w, frameManBmp->h);
 		blit(frameManGUIBmp, m_BackBufferGUI8[player], 0, 0, 0, 0, frameManGUIBmp->w, frameManGUIBmp->h);
 
-		SendFrameSetupMsg(player, useDelta, useInterlacing);
+		// Always tell the client delta is active so it never clears its intermediate buffer.
+		// The keyframe resync works by sending full (non-delta) box IDs which the client copies
+		// in place, rather than by forcing a clear that can't be guaranteed over unreliable transport.
+		SendFrameSetupMsg(player, m_UseDeltaCompression, useInterlacing);
 		SendPostEffectData(player);
 		SendSoundData(player);
 		SendMusicData(player);
@@ -1397,10 +1401,48 @@ namespace RTE {
 								if (bytesNeededPrev > 0 && bytesNeededPlain == 0) { sendEmptyBox = true; }
 							}
 						} else {
-							// Keyframe path: update prev so the next delta frame is computed against
-							// the correct base (what the client actually received this frame).
-							// g_MaskColor == 0, so the client's cleared buffer and our zeroed prev
-							// will agree on the starting state.
+							// Keyframe path: send a full (non-delta) frame so the client overwrites
+							// any drifted pixels.  We do NOT clear the client buffer (DeltaCompressed
+							// stays true in the FrameSetupMsg), so we must also detect areas that
+							// should become empty and send explicit empty-box notifications.
+
+							// 1. Determine whether the current box is empty.
+							unsigned long *pixelInt = (unsigned long *)m_PixelLineBuffer[player];
+							int counter = 0;
+
+							for (counter = 0; counter < thisBoxSize; counter += sizeof(unsigned long)) {
+								if (*pixelInt > 0) {
+									boxIsEmpty = false;
+									break;
+								}
+								pixelInt++;
+							}
+							// Box area is not divisible by 8
+							if (boxIsEmpty && counter > thisBoxSize) {
+								pixelInt--;
+								counter -= sizeof(unsigned long);
+
+								const unsigned char *pixelChr = (unsigned char *)pixelInt;
+								for (; counter < thisBoxSize; counter++) {
+									if (*pixelChr > 0) {
+										boxIsEmpty = false;
+										break;
+									}
+									pixelChr++;
+								}
+							}
+
+							// 2. If empty now, check whether the server's previous state was
+							//    non-empty; if so, send an explicit empty box so the client clears it.
+							if (boxIsEmpty && m_UseDeltaCompression && prevLineBuffers) {
+								const unsigned char *prevLineBufferStart = prevLineBuffers + by * boxedWidth * boxMaxSize + bx * boxMaxSize;
+								for (int i = 0; i < thisBoxSize; i++) {
+									if (prevLineBufferStart[i] > 0) { sendEmptyBox = true; break; }
+								}
+							}
+
+							// 3. Update prevLineBuffers so the next delta frame is computed against
+							//    the keyframe pixels.
 							if (m_UseDeltaCompression && prevLineBuffers) {
 								unsigned char *prevLineBufferStart = prevLineBuffers + by * boxedWidth * boxMaxSize + bx * boxMaxSize;
 								if (m_UseInterlacing) {
@@ -1417,32 +1459,6 @@ namespace RTE {
 									}
 								} else {
 									memcpy(prevLineBufferStart, m_PixelLineBuffer[player], thisBoxSize);
-								}
-							}
-
-							// Check if block is empty by evaluating by 64-bit ints
-							unsigned long *pixelInt = (unsigned long *)m_PixelLineBuffer[player];
-							int counter = 0;
-
-							for (counter = 0; counter < thisBoxSize; counter += sizeof(unsigned long)) {
-								if (*pixelInt > 0) {
-									boxIsEmpty = false;
-									break;
-								}
-								pixelInt++;
-							}
-							// Box area is not divisible by 8
-							if (boxIsEmpty && counter > thisBoxSize) {
-								pixelInt--;
-								counter -= sizeof(unsigned long);
-
-								const unsigned char *pixelChr = (unsigned char*)pixelInt;
-								for (; counter < thisBoxSize; counter++) {
-									if (*pixelChr > 0) {
-										boxIsEmpty = false;
-										break;
-									}
-									pixelChr++;
 								}
 							}
 						}

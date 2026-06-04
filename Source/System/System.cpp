@@ -1,9 +1,11 @@
 #include "System.h"
 
 #include "RTETools.h"
-#include "unzip.h"
+#include "minizip/unzip.h"
 
 #include "RTEError.h"
+
+#define _LINUX_OR_MACOSX_ (__unix__ || (__APPLE__ && __MACH__))
 
 #ifdef _WIN32
 #include "Windows.h"
